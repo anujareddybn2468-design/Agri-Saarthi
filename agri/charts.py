@@ -77,17 +77,17 @@ def history_chart(history: pd.DataFrame) -> go.Figure:
     fig.add_scatter(
         x=history["date"],
         y=history["tmax"],
-        name="Observed max temp (°C)",
+        name="Historical rain estimate (mm)",
         mode="lines",
         yaxis="y2",
         line=dict(color=TEMP_MAX_COLOR, width=2.5),
-        hovertemplate="%{y:.1f} °C<extra>Observed max</extra>",
+       hovertemplate="%{y:.1f} mm<extra>Historical rain estimate</extra>",
     )
     fig.update_layout(
         yaxis=dict(title_text="Rainfall (mm)", rangemode="tozero"),
         yaxis2=dict(title_text="Temperature (°C)", overlaying="y", side="right", showgrid=False),
     )
-    return _base_layout(fig, "Observed history, last 30 days (measured, not a forecast)", 360)
+    return _base_layout(fig, "Historical weather archive, last 30 days (estimated)", 360)
 
 
 def mandi_price_chart(rows: pd.DataFrame) -> go.Figure:

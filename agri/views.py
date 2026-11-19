@@ -1,3 +1,4 @@
+
 """Dashboard section renderers. Each function draws one tab from already-loaded data."""
 
 import html
@@ -91,18 +92,22 @@ def render_overview(
 
 
 def render_history(history: pd.DataFrame | None, error: str | None) -> None:
-    st.markdown("#### Observed history (measured)")
+    st.markdown("#### Historical weather archive (30 days)")
     if error or history is None or history.empty:
-        st.info(f"Observed weather history is unavailable. {error or ''}".strip())
+        st.info(f"Historical weather archive is unavailable. {error or ''}".strip())
         return
     st.plotly_chart(charts.history_chart(history), width="stretch")
-    st.caption("Historical observations from the Open-Meteo archive. The most recent 5 days are not yet included.")
+    st.caption(
+        "Historical archive/reanalysis estimates from Open-Meteo. "
+        "These are not direct measurements from a local weather station. "
+        "The most recent 5 days are not yet included."
+    )
 
 
 def render_risks(risks: list[RiskResult], crop: str) -> None:
     st.caption(PRELIMINARY_NOTE)
     st.caption(
-        "Forecast evidence covers the next 7 days. Observed evidence covers the last 30 days and is labelled as historical."
+        "Forecast evidence covers the next 7 days. Historical archive estimates cover the last 30 days."
     )
     st.caption("Levels come from risk points: 0 LOW, 1-2 MODERATE, 3-4 HIGH, 5 or more CRITICAL.")
     columns = st.columns(2, gap="medium")
@@ -230,7 +235,7 @@ def render_method() -> None:
     st.markdown(
         "- **Location search:** Open-Meteo geocoding.\n"
         "- **Live weather and 7-day forecast:** Open-Meteo forecast API.\n"
-        "- **Observed history (30 days):** Open-Meteo historical archive, ending 5 days ago.\n"
+        "- **Historical weather (30 days):** Open-Meteo archive/reanalysis estimates, ending 5 days ago; not direct station measurements.\n"
         "- **Soil properties:** ISRIC SoilGrids v2.0 (0-5 cm mean estimate).\n"
         "- **Mandi prices:** data.gov.in daily market prices (needs an API key to be connected).\n"
         "- **AI advisory:** Gemini AI when connected, otherwise the rule-based engine.\n"
@@ -238,14 +243,15 @@ def render_method() -> None:
     )
     st.markdown("#### Risk rules (preliminary)")
     st.markdown(
-        "- **Drought:** observed 30-day rain under 30 mm (+2) or under 60 mm (+1); dry spell of 14+ days (+1); forecast 7-day rain under 5 mm (+1).\n"
-        "- **Heat stress:** forecast peak 40 °C+ (+2) or 38 °C+ (+1); observed hot days (35 °C+) 10+ (+2) or 5+ (+1).\n"
-        "- **Excessive rainfall:** forecast 7-day total 100 mm+ (+2) or 50 mm+ (+1); heaviest day 115.5 mm+ (+2) or 64.5 mm+ (+1); observed 30-day total 300 mm+ (+1).\n"
+        "- **Drought:** historical 30-day archive rainfall estimate under 30 mm (+2) or under 60 mm (+1); dry spell of 14+ days (+1); forecast 7-day rain under 5 mm (+1).\n"
+        "- **Heat stress:** forecast peak 40 °C+ (+2) or 38 °C+ (+1); historical archive hot-day estimates (35 °C+) 10+ (+2) or 5+ (+1).\n"
+        "- **Excessive rainfall:** forecast 7-day total 100 mm+ (+2) or 50 mm+ (+1); heaviest day 115.5 mm+ (+2) or 64.5 mm+ (+1); historical 30-day archive rainfall estimate 300 mm+ (+1).\n"
         "- **Levels:** 0 LOW, 1-2 MODERATE, 3-4 HIGH, 5+ CRITICAL."
     )
     st.markdown("#### Limits")
     st.markdown(
         "- Forecasts are model predictions and can be wrong.\n"
+        "- Historical weather values are archive/reanalysis estimates, not direct station observations.\n"
         "- Soil values are estimates from a 250 m grid, not field tests.\n"
         "- No yield predictions are made because there is no validated training data.\n"
         "- The AI advisory only states figures present in the collected data. It is not a trained machine-learning model.\n"

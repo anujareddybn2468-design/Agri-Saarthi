@@ -1,9 +1,13 @@
+
 """Optional API keys. Values are read at runtime and never displayed or logged."""
 
 import os
+from pathlib import Path
 
 import streamlit as st
+from dotenv import load_dotenv
 
+load_dotenv(Path(__file__).resolve().parent.parent / "assets" / ".env")
 
 def get_secret(name: str) -> str | None:
     value = os.environ.get(name)

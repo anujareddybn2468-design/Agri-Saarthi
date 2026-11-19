@@ -54,9 +54,16 @@ def _heat_indicator(profile: dict, forecast: pd.DataFrame | None) -> Indicator:
 
 def _water_indicator(profile: dict, history: pd.DataFrame | None) -> Indicator:
     need = profile["water_need_30d_mm"]
-    if history is None or history["rain_mm"].isna().all():
+    if history is None or "rain_mm" not in history:
         return Indicator("Recent rainfall vs crop need", UNKNOWN, "Observed 30-day rainfall is unavailable.")
-    total = float(history["rain_mm"].sum())
+    observed = history["rain_mm"].dropna()
+    if len(observed) < 24 or len(history) < 24:
+        return Indicator(
+            "Recent rainfall vs crop need",
+            UNKNOWN,
+            f"Only {len(observed)} valid daily rainfall readings are available; at least 24 are needed for a 30-day comparison.",
+        )
+    total = float(observed.sum() * 30 / len(observed))
     ratio = total / need
     if ratio < 0.5:
         status = AT_RISK
@@ -65,17 +72,24 @@ def _water_indicator(profile: dict, history: pd.DataFrame | None) -> Indicator:
     else:
         status = FAVOURABLE
     text = (
-        f"Observed rain over 30 days was {total:.0f} mm against a preliminary crop need of about {need} mm "
-        f"({ratio:.0%} of need). Rainfall is not the only water source; irrigation and soil moisture matter."
+        f"Estimated rain over 30 days was {total:.0f} mm, adjusted from {len(observed)} valid daily readings, "
+        f"against a preliminary crop need of about {need} mm ({ratio:.0%} of need). "
+        "Rainfall is not the only water source; irrigation and soil moisture matter."
     )
     return Indicator("Recent rainfall vs crop need", status, text)
 
 
 def _excess_rain_indicator(profile: dict, forecast: pd.DataFrame | None) -> Indicator:
     limit = profile["excess_rain_7d_mm"]
-    if forecast is None or forecast["rain_mm"].isna().all():
-        return Indicator("Excess rain exposure", UNKNOWN, "7-day rainfall forecast is unavailable.")
-    total = float(forecast["rain_mm"].sum())
+    if forecast is None or "rain_mm" not in forecast or forecast["rain_mm"].notna().sum() < 5:
+        valid = 0 if forecast is None or "rain_mm" not in forecast else int(forecast["rain_mm"].notna().sum())
+        return Indicator(
+            "Excess rain exposure",
+            UNKNOWN,
+            f"Only {valid} valid daily rainfall readings are available; at least 5 are needed for a 7-day comparison.",
+        )
+    valid_rain = forecast["rain_mm"].dropna()
+    total = float(valid_rain.sum() * 7 / len(valid_rain))
     if total >= limit:
         status = AT_RISK
         text = f"Forecast rain of {total:.0f} mm over 7 days is at or above the preliminary {limit} mm level for this crop."

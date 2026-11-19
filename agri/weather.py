@@ -2,7 +2,8 @@
 
 from datetime import date, timedelta
 
-import pandas as pd
+import pandas as pd 
+import streamlit as st
 
 from agri.http_client import ApiError, get_json
 
@@ -13,7 +14,7 @@ ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 ARCHIVE_LAG_DAYS = 5
 HISTORY_DAYS = 30
 
-
+@st.cache_data(ttl=900, show_spinner=False)
 def fetch_forecast(lat: float, lon: float) -> dict:
     """Return current conditions and a 7-day daily forecast. Raises ApiError on failure."""
     payload = get_json(
@@ -80,7 +81,7 @@ def _current_soil_moisture(payload: dict, current_time: str | None) -> float | N
     value = values[times.index(current_time)]
     return None if value is None else float(value)
 
-
+@st.cache_data(ttl=21600, show_spinner=False)
 def fetch_history(lat: float, lon: float, today: date | None = None) -> pd.DataFrame:
     """Return the last 30 days of observed daily rainfall and temperature.
 

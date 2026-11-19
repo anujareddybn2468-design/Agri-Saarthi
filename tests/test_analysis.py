@@ -6,7 +6,7 @@ import pytest
 from agri.crop_risk import AT_RISK, FAVOURABLE, UNKNOWN, WATCH, assess_crop
 from agri.ndvi import classify_ndvi
 from agri.recommendations import build_recommendations
-from agri.risk import assess_all_risks, assess_drought, assess_excess_rain, assess_heat
+from agri.risk import HIGH, LOW, INSUFFICIENT, assess_all_risks, assess_drought, assess_excess_rain, assess_heat
 
 
 def make_forecast(rain, tmax, tmin=20.0):
@@ -33,45 +33,45 @@ def test_drought_high_when_dry_observed_and_forecast():
     history = make_history([0.0] * 30)
     forecast = make_forecast([0.0] * 7, 30)
     risk = assess_drought(forecast, history)
-    assert risk.level == "High"
+    assert risk.level == HIGH
     assert risk.points >= 3
 
 
 def test_drought_low_with_healthy_rainfall():
     history = make_history([10.0] * 30)
     forecast = make_forecast([8.0] * 7, 28)
-    assert assess_drought(forecast, history).level == "Low"
+    assert assess_drought(forecast, history).level == LOW
 
 
 def test_drought_insufficient_when_no_data():
     risk = assess_drought(None, None)
-    assert risk.level == "Insufficient data"
+    assert risk.level == INSUFFICIENT
     assert risk.unavailable
 
 
 def test_heat_high_with_extreme_forecast_and_hot_history():
     forecast = make_forecast([0.0] * 7, 41)
     history = make_history([0.0] * 30, tmax=36.0)
-    assert assess_heat(forecast, history).level == "High"
+    assert assess_heat(forecast, history).level == HIGH
 
 
 def test_heat_low_when_mild():
     forecast = make_forecast([0.0] * 7, 26)
     history = make_history([0.0] * 30, tmax=27.0)
-    assert assess_heat(forecast, history).level == "Low"
+    assert assess_heat(forecast, history).level == LOW
 
 
 def test_excess_rain_high_with_heavy_forecast():
     forecast = make_forecast([20, 70, 40, 10, 5, 0, 0], 28)
     history = make_history([10.0] * 30)
     risk = assess_excess_rain(forecast, history)
-    assert risk.level == "High"
+    assert risk.level == HIGH
     assert any("heaviest" in line.lower() or "64.5" in line or "mm total" in line for line in risk.evidence)
 
 
 def test_all_risks_return_three_named_results():
     names = [risk.name for risk in assess_all_risks(make_forecast([0.0] * 7, 30), make_history([5.0] * 30))]
-    assert names == ["Drought risk", "Heat stress risk", "Excessive rainfall risk"]
+    assert names == ["Drought risk", "Heat stress risk", "Cold risk", "Excessive rainfall risk"]
 
 
 def test_crop_indicators_flag_heat_for_wheat():
@@ -123,3 +123,51 @@ def test_longest_dry_spell_counts_longest_run():
     rain = pd.Series([0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0])
     assert _longest_dry_spell(rain) == 5
     assert _longest_dry_spell(pd.Series([3.0, 4.0])) == 0
+
+
+def test_missing_rainfall_breaks_dry_spell_instead_of_counting_as_dry():
+    from agri.risk import _longest_dry_spell
+
+    rain = pd.Series([0.0] * 8 + [None] + [0.0] * 8)
+    assert _longest_dry_spell(rain) == 8
+
+
+def test_drought_skips_observed_scoring_when_history_is_too_incomplete():
+    history = make_history([0.0] * 10 + [None] * 20)
+    forecast = make_forecast([8.0] * 7, 30)
+    risk = assess_drought(forecast, history)
+    assert risk.points == 0
+    assert any("fewer than 24 valid readings" in item for item in risk.unavailable)
+
+
+def test_crop_water_indicator_unknown_when_rainfall_history_is_incomplete():
+    history = make_history([0.0] * 10 + [None] * 20)
+    indicators = {i.name: i for i in assess_crop("Rice", None, history, ph=6.0)}
+    assert indicators["Recent rainfall vs crop need"].status == UNKNOWN
+
+
+def test_excess_rain_forecast_adjusts_for_missing_days():
+    forecast = make_forecast([20.0, 20.0, 20.0, 20.0, 20.0, None, None], 28)
+    risk = assess_excess_rain(forecast, None)
+    assert any("adjusted from 5 valid daily readings" in line for line in risk.evidence)
+    assert any("140 mm over 7 days" in line for line in risk.evidence)
+
+
+def test_excess_rain_skips_forecast_when_too_few_days_are_valid():
+    forecast = make_forecast([100.0, None, None, None, None, None, None], 28)
+    risk = assess_excess_rain(forecast, None)
+    assert risk.level == INSUFFICIENT
+    assert any("fewer than 5 valid daily readings" in item for item in risk.unavailable)
+
+
+def test_excess_rain_skips_observed_scoring_when_history_is_incomplete():
+    history = make_history([20.0] * 10 + [None] * 20)
+    risk = assess_excess_rain(None, history)
+    assert risk.level == INSUFFICIENT
+    assert any("fewer than 24 valid readings" in item for item in risk.unavailable)
+
+
+def test_crop_excess_rain_is_unknown_with_incomplete_forecast():
+    forecast = make_forecast([100.0, None, None, None, None, None, None], 28)
+    indicators = {i.name: i for i in assess_crop("Rice", forecast, None, ph=6.0)}
+    assert indicators["Excess rain exposure"].status == UNKNOWN

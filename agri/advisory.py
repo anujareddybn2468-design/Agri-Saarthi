@@ -61,6 +61,28 @@ def is_valid_advisory(data: object) -> bool:
     for key in _REQUIRED_LISTS:
         if not isinstance(data.get(key), list):
             return False
+
+    # Validate every nested item before the UI renders it. A malformed AI response
+    # must fall back to the deterministic rules rather than breaking the app.
+    for item in data["crop_recommendations"]:
+        if not isinstance(item, dict) or not all(
+            isinstance(item.get(field), str)
+            for field in ("topic", "advice", "basis")
+        ):
+            return False
+        if item["topic"] not in {
+            "Irrigation", "Soil moisture", "Nutrients",
+            "Pest and disease", "Harvest or sowing",
+        }:
+            return False
+    for item in data["next_7_days"]:
+        if not isinstance(item, dict) or not all(
+            isinstance(item.get(field), str) for field in ("day", "action")
+        ):
+            return False
+    if not all(isinstance(item, str) for item in data["preventive_measures"]):
+        return False
+
     confidence = data.get("data_confidence")
     if not isinstance(confidence, dict) or not all(isinstance(confidence.get(key), list) for key in _CONFIDENCE_KEYS):
         return False

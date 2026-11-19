@@ -1,3 +1,5 @@
+ 
+
 """Rule-based advisory engine. Reads the same facts dictionary that is sent to Gemini and
 produces the same structure, so the dashboard can display either source identically."""
 
@@ -133,22 +135,30 @@ def _crop_recommendations(facts: dict, risks: dict[str, dict]) -> list[dict]:
     history = facts["observed_last_30_days"]
     water = _indicator_status(facts, "Recent rainfall vs crop need")
     if risks["Drought risk"]["level"] in WARNING_LEVELS or water in ("At risk", "Watch"):
-        recs.append({
-            "topic": "Irrigation",
-            "advice": f"Irrigate {crop} to close the rainfall gap. Observed rain was {history['rain_total_mm']:.0f} mm over the last 30 days.",
-            "basis": "Observed 30-day rainfall compared with a preliminary crop water need.",
-        })
+        if history and history.get("rain_total_mm") is not None:
+            advice = (
+                f"Check field moisture and irrigate {crop} only where needed to address the rainfall gap. "
+                f"Historical archive rainfall estimate was {history['rain_total_mm']:.0f} mm over the last 30 days."
+            )
+            basis = "Historical archive rainfall estimate compared with a preliminary crop water need."
+        else:
+            advice = (
+                f"Check topsoil moisture by hand. If the root zone is dry and water is available, "
+                f"plan irrigation for {crop}; recent rainfall totals are unavailable."
+            )
+            basis = "Rainfall totals are unavailable; recommendation is conditional on a field moisture check."
+        recs.append({"topic": "Irrigation", "advice": advice, "basis": basis})
     elif history:
         recs.append({
             "topic": "Irrigation",
             "advice": "Recent rain has been close to the crop's preliminary need. Irrigate only where topsoil is dry.",
-            "basis": "Observed 30-day rainfall and a preliminary crop water need.",
+            "basis": "Historical archive rainfall estimate and a preliminary crop water need.",
         })
     else:
         recs.append({
             "topic": "Irrigation",
-            "advice": "Recent rainfall data is unavailable, so irrigation timing cannot be based on it. Check topsoil moisture by hand.",
-            "basis": "Observed rainfall unavailable.",
+            "advice": "Historical rainfall archive data is unavailable, so irrigation timing cannot be based on it. Check topsoil moisture by hand.",
+            "basis": "Historical archive rainfall unavailable.",
         })
 
     moisture = facts["current_weather"]["soil_moisture_model_pct"] if facts["current_weather"] else None
@@ -255,13 +265,12 @@ def _preventive(risks: dict[str, dict]) -> list[str]:
 
 
 def _data_confidence(facts: dict, risks: dict[str, dict]) -> dict:
-    measured = []
+    historical = []
     if facts["observed_last_30_days"]:
-        measured.append(
-            f"Observed rain and temperature for {facts['observed_last_30_days']['period']} (Open-Meteo archive)."
+        historical.append(
+            f"Historical rainfall and temperature estimates for "
+            f"{facts['observed_last_30_days']['period']} (Open-Meteo archive/reanalysis)."
         )
-    if facts["vegetation_ndvi"]:
-        measured.append("Vegetation index (NDVI) that you entered. Its source is not verified by the app.")
     forecast = []
     if facts["current_weather"]:
         forecast.append("Current conditions (Open-Meteo weather model, not a station reading).")
@@ -276,7 +285,8 @@ def _data_confidence(facts: dict, risks: dict[str, dict]) -> dict:
     for risk in risks.values():
         missing.extend(risk["unavailable"])
     return {
-        "measured": measured or ["No observed weather data was available."],
+        # Keep the existing key so the dashboard continues to work.
+        "measured": historical or ["No historical archive weather data was available."],
         "forecast": forecast or ["No forecast was available."],
         "model_estimates": estimates or ["No model-based estimates were available."],
         "missing": list(dict.fromkeys(missing)) or ["Nothing material is missing."],
